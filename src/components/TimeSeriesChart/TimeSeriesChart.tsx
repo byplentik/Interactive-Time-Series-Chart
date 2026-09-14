@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef } from "react";
 import Highcharts from "highcharts";
-import type { ColorType, Options, Point, SeriesOptionsType } from "highcharts";
+import type { ColorType, Options, Point, SeriesOptionsType, YAxisOptions } from "highcharts";
 import { HighchartsReact } from "highcharts-react-official";
 import type { HighchartsReactRefObject } from "highcharts-react-official";
 import type { ChartSeries, ChartSeriesType, TimeSeriesChartProps } from "./types";
@@ -9,10 +9,10 @@ import "./TimeSeriesChart.css";
 export type { ChartPoint, ChartSeries, ChartSeriesType, TimeSeriesChartProps } from "./types";
 
 const SERIES_COLORS: Record<ChartSeriesType, string> = {
-  area: "#FFE66D",
-  spline: "#228B22",
-  line: "#A000FF",
-  bar: "#3267E8",
+  area: "#F4E394",
+  spline: "#2AA12A",
+  line: "#D000FF",
+  bar: "#3B6FE8",
 };
 
 const SERIES_Z_INDEX: Record<ChartSeriesType, number> = {
@@ -21,8 +21,6 @@ const SERIES_Z_INDEX: Record<ChartSeriesType, number> = {
   spline: 3,
   line: 4,
 };
-
-const DAY_MS = 24 * 3600 * 1000;
 
 function escapeHtml(value: string): string {
   return value
@@ -47,7 +45,17 @@ function toHighchartsData(series: ChartSeries): Array<[number, number]> {
   ]);
 }
 
-function toHighchartsSeries(series: ChartSeries): SeriesOptionsType {
+function getAxisMax(series: ChartSeries): number {
+  const maxValue = Math.max(0, ...series.data.map((point) => point.value));
+
+  if (series.type === "bar") {
+    return Math.max(maxValue * 40, 12);
+  }
+
+  return maxValue === 0 ? 1 : maxValue * 1.08;
+}
+
+function toHighchartsSeries(series: ChartSeries, axisIndex: number): SeriesOptionsType {
   const color = SERIES_COLORS[series.type];
   const data = toHighchartsData(series);
   const zIndex = SERIES_Z_INDEX[series.type];
@@ -58,16 +66,22 @@ function toHighchartsSeries(series: ChartSeries): SeriesOptionsType {
       name: series.name,
       data,
       color,
+      yAxis: axisIndex,
       zIndex,
-      lineWidth: 1.6,
-      lineColor: "#F0D24F",
-      fillOpacity: 0.48,
+      lineWidth: 1.2,
+      lineColor: "#E8D36A",
+      fillOpacity: 0.72,
       threshold: 0,
       marker: {
         enabled: false,
+        symbol: "circle",
+        radius: 3.5,
+        fillColor: "#F6E7A0",
+        lineWidth: 0,
         states: {
           hover: {
-            enabled: false,
+            enabled: true,
+            radius: 4.5,
           },
         },
       },
@@ -75,7 +89,8 @@ function toHighchartsSeries(series: ChartSeries): SeriesOptionsType {
         hover: {
           lineWidthPlus: 0,
           halo: {
-            size: 0,
+            size: 8,
+            opacity: 0.18,
           },
         },
       },
@@ -88,19 +103,20 @@ function toHighchartsSeries(series: ChartSeries): SeriesOptionsType {
       name: series.name,
       data,
       color,
+      yAxis: axisIndex,
       zIndex,
-      lineWidth: 2.4,
+      lineWidth: 6,
       marker: {
         enabled: false,
         symbol: "circle",
-        radius: 4,
+        radius: 4.5,
         fillColor: "#ffffff",
         lineColor: color,
         lineWidth: 2,
         states: {
           hover: {
             enabled: true,
-            radius: 5,
+            radius: 5.5,
             lineWidth: 2,
             fillColor: "#ffffff",
             lineColor: color,
@@ -109,10 +125,10 @@ function toHighchartsSeries(series: ChartSeries): SeriesOptionsType {
       },
       states: {
         hover: {
-          lineWidthPlus: 0.4,
+          lineWidthPlus: 0,
           halo: {
-            size: 14,
-            opacity: 0.22,
+            size: 18,
+            opacity: 0.28,
           },
         },
       },
@@ -125,8 +141,9 @@ function toHighchartsSeries(series: ChartSeries): SeriesOptionsType {
       name: series.name,
       data,
       color,
+      yAxis: axisIndex,
       zIndex,
-      lineWidth: 2,
+      lineWidth: 2.2,
       marker: {
         enabled: true,
         symbol: "square",
@@ -136,18 +153,18 @@ function toHighchartsSeries(series: ChartSeries): SeriesOptionsType {
         states: {
           hover: {
             enabled: true,
-            radius: 6.5,
-            lineWidth: 2,
-            lineColor: "#ffffff",
+            radius: 6,
+            lineWidth: 0,
             fillColor: color,
           },
         },
       },
       states: {
         hover: {
-          lineWidthPlus: 0.6,
+          lineWidthPlus: 0.4,
           halo: {
-            size: 0,
+            size: 16,
+            opacity: 0.28,
           },
         },
       },
@@ -159,15 +176,16 @@ function toHighchartsSeries(series: ChartSeries): SeriesOptionsType {
     name: series.name,
     data,
     color,
+    yAxis: axisIndex,
     zIndex,
     borderWidth: 0,
     borderRadius: 0,
-    pointWidth: 10,
+    pointWidth: 16,
     grouping: false,
     pointPlacement: "on",
     states: {
       hover: {
-        brightness: 0.08,
+        brightness: 0.06,
         halo: {
           size: 0,
         },
@@ -176,16 +194,47 @@ function toHighchartsSeries(series: ChartSeries): SeriesOptionsType {
   };
 }
 
+function buildYAxes(series: ChartSeries[]): YAxisOptions[] {
+  if (series.length === 0) {
+    return [
+      {
+        title: { text: undefined },
+        labels: { enabled: false },
+        gridLineWidth: 0,
+        lineWidth: 0,
+      },
+    ];
+  }
+
+  return series.map((item, index) => ({
+    title: {
+      text: undefined,
+    },
+    min: 0,
+    max: getAxisMax(item),
+    startOnTick: false,
+    endOnTick: false,
+    gridLineWidth: 0,
+    lineWidth: 0,
+    tickWidth: 0,
+    tickLength: 0,
+    labels: {
+      enabled: false,
+    },
+    visible: index === 0,
+  }));
+}
+
 function buildChartOptions(series: ChartSeries[]): Options {
   return {
     chart: {
       backgroundColor: "transparent",
-      plotBackgroundColor: "#fbfbf8",
-      plotBorderColor: "#c4c4c4",
+      plotBackgroundColor: "#f6d3d7",
+      plotBorderColor: "#c1c1c1",
       plotBorderWidth: 1,
       plotShadow: false,
-      height: 460,
-      spacing: [20, 20, 32, 16],
+      height: 420,
+      spacing: [10, 10, 10, 8],
       style: {
         fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
         cursor: "pointer",
@@ -213,42 +262,16 @@ function buildChartOptions(series: ChartSeries[]): Options {
     colors: Object.values(SERIES_COLORS),
     xAxis: {
       type: "datetime",
-      tickInterval: DAY_MS,
-      minPadding: 0.06,
-      maxPadding: 0.06,
+      minPadding: 0.02,
+      maxPadding: 0.02,
       lineWidth: 0,
       tickLength: 0,
-      gridLineWidth: 1,
-      gridLineColor: "#e6e6e6",
-      labels: {
-        format: "{value:%d.%m}",
-        style: {
-          color: "#8d8d8d",
-          fontSize: "11px",
-        },
-        y: 18,
-      },
-      dateTimeLabelFormats: {
-        day: "%d.%m",
-        week: "%d.%m",
-        month: "%d.%m",
-      },
-    },
-    yAxis: {
-      title: {
-        text: undefined,
-      },
-      min: 0,
-      maxPadding: 0.08,
-      endOnTick: false,
-      gridLineWidth: 1,
-      gridLineColor: "#e6e6e6",
-      lineWidth: 0,
-      tickWidth: 0,
+      gridLineWidth: 0,
       labels: {
         enabled: false,
       },
     },
+    yAxis: buildYAxes(series),
     tooltip: {
       shared: true,
       useHTML: true,
@@ -297,7 +320,6 @@ function buildChartOptions(series: ChartSeries[]): Options {
       },
       column: {
         crisp: true,
-        minPointLength: 2,
       },
     },
     series: series.map(toHighchartsSeries),
@@ -309,16 +331,8 @@ function buildChartOptions(series: ChartSeries[]): Options {
           },
           chartOptions: {
             chart: {
-              height: 380,
-              spacing: [10, 8, 22, 8],
-            },
-            xAxis: {
-              tickInterval: undefined,
-              labels: {
-                style: {
-                  fontSize: "10px",
-                },
-              },
+              height: 340,
+              spacing: [8, 6, 8, 6],
             },
           },
         },
@@ -328,8 +342,8 @@ function buildChartOptions(series: ChartSeries[]): Options {
           },
           chartOptions: {
             chart: {
-              height: 340,
-              spacing: [8, 4, 18, 4],
+              height: 280,
+              spacing: [6, 4, 6, 4],
             },
           },
         },
